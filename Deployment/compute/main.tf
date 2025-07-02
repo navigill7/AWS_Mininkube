@@ -5,7 +5,7 @@ resource "aws_instance" "minikube_instance" {
   vpc_security_group_ids = [var.security_group_id]
   key_name               = var.key_name
 
-  user_data = <<EOF
+  user_data = <<-"EOF"
 #!/bin/bash
 set -e
 LOGFILE="/home/admin/docker-setup.log"
@@ -15,7 +15,7 @@ trap 'echo "❌ Script failed, cleaning up..."; minikube delete; exit 1' ERR
 export HOME=/root
 
 # ✅ System requirements
-if [ \$(nproc) -lt 2 ] || [ \$(free -m | awk '/Mem:/ {print \$2}') -lt 2000 ]; then
+if [ $(nproc) -lt 2 ] || [ $(free -m | awk '/Mem:/ {print $2}') -lt 2000 ]; then
     echo "❌ Requires at least 2 CPUs and 2GB RAM"
     exit 1
 fi
@@ -30,9 +30,9 @@ curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/
 chmod a+r /etc/apt/keyrings/docker.gpg
 
 echo "📦 Adding Docker repository..."
-echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
 https://download.docker.com/linux/debian \\
-\$(lsb_release -cs 2>/dev/null || echo bookworm) stable" > /etc/apt/sources.list.d/docker.list
+$(lsb_release -cs 2>/dev/null || echo bookworm) stable" > /etc/apt/sources.list.d/docker.list
 
 echo "📥 Installing Docker..."
 apt-get update -y
@@ -48,15 +48,15 @@ install -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
 rm minikube-linux-amd64
 
 echo "📥 Installing kubectl..."
-K_VER=\$(curl -Ls https://dl.k8s.io/release/stable.txt)
-curl -LO "https://dl.k8s.io/release/\\${K_VER}/bin/linux/amd64/kubectl"
+K_VER=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+curl -LO "https://dl.k8s.io/release/${K_VER}/bin/linux/amd64/kubectl"
 install -m 0755 kubectl /usr/local/bin/kubectl
 rm kubectl
 
 echo "📁 Setting up Minikube config dirs..."
-mkdir -p \$HOME/.kube \$HOME/.minikube
-touch \$HOME/.kube/config
-chmod -R 777 \$HOME/.kube \$HOME/.minikube
+mkdir -p $HOME/.kube $HOME/.minikube
+touch $HOME/.kube/config
+chmod -R 777 $HOME/.kube $HOME/.minikube
 
 echo "🚀 Starting Minikube with Docker driver..."
 minikube start --driver=docker --force
@@ -108,8 +108,8 @@ systemctl restart nginx
 systemctl enable nginx
 
 echo "✅ NGINX is set up to forward traffic on ports 80, 1337, and 30004"
-PUBLIC_IP=\$(curl -s http://checkip.amazonaws.com)
-echo "🌐 Access Strapi at: http://\$PUBLIC_IP"
+PUBLIC_IP=$(curl -s http://checkip.amazonaws.com)
+echo "🌐 Access Strapi at: http://$PUBLIC_IP"
 EOF
 
   tags = {
