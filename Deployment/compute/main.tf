@@ -49,7 +49,7 @@ rm minikube-linux-amd64
 
 echo "📥 Installing kubectl..."
 K_VER=\$(curl -Ls https://dl.k8s.io/release/stable.txt)
-curl -LO "https://dl.k8s.io/release/\${K_VER}/bin/linux/amd64/kubectl"
+curl -LO "https://dl.k8s.io/release/\\${K_VER}/bin/linux/amd64/kubectl"
 install -m 0755 kubectl /usr/local/bin/kubectl
 rm kubectl
 
