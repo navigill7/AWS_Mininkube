@@ -1,6 +1,6 @@
 instance_type = "t2.medium"
 
-ami_id = "ami-020cba7c55df1f615"
+ami_id = "ami-0779caf41f9ba54f0"
 
 
 key_name = "minikube"
