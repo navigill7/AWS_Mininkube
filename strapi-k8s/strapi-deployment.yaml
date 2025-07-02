@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: strapi
-          image: strapi/strapi:latest
+          image: 647198474080.dkr.ecr.us-east-1.amazonaws.com/strapi-artifacts:214bdcab4e7eec123e6b1e03cdefdcee3c9823f0
           ports:
             - containerPort: 1337
           env:
