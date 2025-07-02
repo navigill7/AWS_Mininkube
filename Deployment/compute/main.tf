@@ -7,31 +7,62 @@ resource "aws_instance" "minikube_instance" {
 
   user_data = <<EOF
 #!/bin/bash
+set -e
+LOGFILE="/home/admin/docker-setup.log"
+exec > >(tee -a "$LOGFILE") 2>&1
 
-# Update system
-apt update -y && apt upgrade -y
+trap 'echo "❌ Script failed, cleaning up..."; minikube delete; exit 1' ERR
+export HOME=/root
 
-# Install Docker
-apt install -y docker.io
+# ✅ System requirements
+if [ \$(nproc) -lt 2 ] || [ \$(free -m | awk '/Mem:/ {print \$2}') -lt 2000 ]; then
+    echo "❌ Requires at least 2 CPUs and 2GB RAM"
+    exit 1
+fi
+
+echo "🛠️ Updating system and installing dependencies..."
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg lsb-release apt-transport-https nginx
+
+echo "🔐 Adding Docker GPG key..."
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo "📦 Adding Docker repository..."
+echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \\
+https://download.docker.com/linux/debian \\
+\$(lsb_release -cs 2>/dev/null || echo bookworm) stable" > /etc/apt/sources.list.d/docker.list
+
+echo "📥 Installing Docker..."
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+echo "✅ Starting Docker..."
 systemctl enable docker
 systemctl start docker
-usermod -aG docker ubuntu
 
-# Install conntrack (required by Minikube)
-apt install -y conntrack
+echo "📥 Installing Minikube..."
+curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+install -m 0755 minikube-linux-amd64 /usr/local/bin/minikube
+rm minikube-linux-amd64
 
-# Install kubectl
-curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl
-mv kubectl /usr/local/bin/
+echo "📥 Installing kubectl..."
+K_VER=\$(curl -Ls https://dl.k8s.io/release/stable.txt)
+curl -LO "https://dl.k8s.io/release/\${K_VER}/bin/linux/amd64/kubectl"
+install -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
 
-# Install Minikube
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-chmod +x minikube
-install minikube /usr/local/bin/
+echo "📁 Setting up Minikube config dirs..."
+mkdir -p \$HOME/.kube \$HOME/.minikube
+touch \$HOME/.kube/config
+chmod -R 777 \$HOME/.kube \$HOME/.minikube
 
-# Start Minikube using Docker driver
-sudo -u ubuntu minikube start --driver=docker
+echo "🚀 Starting Minikube with Docker driver..."
+minikube start --driver=docker --force
+
+echo "✅ Minikube is up:"
+minikube status
 EOF
 
   tags = {
