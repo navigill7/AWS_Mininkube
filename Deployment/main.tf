@@ -9,7 +9,7 @@ module "networking" {
 }
 
 module "security" {
-  source = "./Security"
+  source = "./security"
   vpc_id = module.networking.vpc_id
 }
 
