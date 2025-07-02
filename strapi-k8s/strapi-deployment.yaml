@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: strapi
+  labels:
+    app: strapi
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: strapi
+  template:
+    metadata:
+      labels:
+        app: strapi
+    spec:
+      containers:
+        - name: strapi
+          image: strapi/strapi:latest
+          ports:
+            - containerPort: 1337
+          env:
+            - name: DATABASE_CLIENT
+              value: "sqlite"
