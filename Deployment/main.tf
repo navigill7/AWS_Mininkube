@@ -14,7 +14,7 @@ module "security" {
 }
 
 module "compute" {
-  source = "./Compute"
+  source = "./compute"
   vpc_id = module.networking.vpc_id
   security_group_id = module.security.strapi_security_group_id
   ami_id = var.ami_id
