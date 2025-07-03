@@ -5,7 +5,7 @@ resource "aws_instance" "minikube_instance" {
   vpc_security_group_ids = [var.security_group_id]
   key_name               = var.key_name
 
-  user_data = <<-"EOF"
+  user_data = <<-EOF
 #!/bin/bash
 set -e
 LOGFILE="/home/admin/docker-setup.log"
