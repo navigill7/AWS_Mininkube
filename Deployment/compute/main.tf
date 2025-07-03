@@ -65,10 +65,10 @@ resource "aws_instance" "minikube_instance" {
     minikube status
 
     echo "📥 Pulling Strapi image..."
-    docker pull booraraman/strapi-app:053a8235e0799766123b09e5043afbbd48374d65
+    docker pull gillnavi/strapi:2dc163943be49a1a8e6d59749cd6c6067da5fee8
 
     echo "📦 Creating Strapi deployment..."
-    kubectl create deployment strapi --image=booraraman/strapi-app:053a8235e0799766123b09e5043afbbd48374d65
+    kubectl create deployment strapi --image=gillnavi/strapi:2dc163943be49a1a8e6d59749cd6c6067da5fee8
 
     echo "🌍 Exposing Strapi on NodePort 30004 (port 1337)..."
     kubectl expose deployment strapi --type=NodePort --port=1337 --target-port=1337
