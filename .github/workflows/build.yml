@@ -17,79 +17,131 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_uri: ${{ steps.build.outputs.image_uri }}
-
-    # steps:
-    #   - name: Checkout repo
-    #     uses: actions/checkout@v4
-
-    #   - name: Configure AWS credentials
-    #     uses: aws-actions/configure-aws-credentials@v2
-    #     with:
-    #       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-    #       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-    #       aws-region: ${{ env.AWS_REGION }}
-
-    #   - name: Login to ECR
-    #     id: login-ecr
-    #     uses: aws-actions/amazon-ecr-login@v2
-
-    #   - name: Build & Push Docker Image to ECR
-    #     id: build
-    #     working-directory: strapi
-    #     env:
-    #       ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-    #     run: |
-    #       IMAGE_URI=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}
-    #       docker build -t $IMAGE_URI .
-    #       docker push $IMAGE_URI
-    #       echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
-
-    #   - name: Update K8s Deployment with new image tag
-    #     run: |
-    #       sed -i 's|image: .*|image: '"${{ steps.build.outputs.image_uri }}"'|' strapi-k8s/strapi-deployment.yaml
-
-    #   - name: Setup SSH access
-    #     run: |
-    #       mkdir -p ~/.ssh
-    #       echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-    #       chmod 600 ~/.ssh/id_ed25519
-    #       ssh-keyscan github.com >> ~/.ssh/known_hosts
-
-    #   - name: Commit & Push updated deployment file
-    #     run: |
-    #       git config --global user.name "github-actions"
-    #       git config --global user.email "github-actions@github.com"
-    #       git remote set-url origin git@github.com:${{ github.repository }}.git
-    #       git add strapi-k8s/strapi-deployment.yaml
-    #       if git diff --staged --quiet; then
-    #         echo "No changes to commit."
-    #       else
-    #         git commit -m "chore: update strapi image to $IMAGE_TAG"
-    #         git push origin main
-    #       fi
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Create ECR repository if it doesn't exist
+        run: |
+          aws ecr describe-repositories --repository-names $ECR_REPO_NAME --region $AWS_REGION || \
+          aws ecr create-repository --repository-name $ECR_REPO_NAME --region $AWS_REGION
+          
+      - name: Build & Push Docker Image to ECR
+        id: build
+        working-directory: strapi
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI=${ECR_REGISTRY}/${ECR_REPO_NAME}:${IMAGE_TAG}
+          echo "Building Docker image..."
+          docker build -t $IMAGE_URI .
+          echo "Pushing Docker image to ECR..."
+          docker push $IMAGE_URI
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "Successfully pushed image: $IMAGE_URI"
+          
+      - name: Update K8s Deployment with new image tag
+        run: |
+          if [ -f strapi-k8s/strapi-deployment.yaml ]; then
+            sed -i 's|image: .*|image: '"${{ steps.build.outputs.image_uri }}"'|' strapi-k8s/strapi-deployment.yaml
+            echo "Updated deployment file with new image"
+          else
+            echo "Warning: strapi-k8s/strapi-deployment.yaml not found"
+          fi
+          
+      - name: Setup SSH access
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          
+      - name: Commit & Push updated deployment file
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin git@github.com:${{ github.repository }}.git
+          
+          if [ -f strapi-k8s/strapi-deployment.yaml ]; then
+            git add strapi-k8s/strapi-deployment.yaml
+            if git diff --staged --quiet; then
+              echo "No changes to commit."
+            else
+              git commit -m "chore: update strapi image to $IMAGE_TAG [skip ci]"
+              git push origin main
+              echo "Successfully committed and pushed updated deployment file"
+            fi
+          else
+            echo "Skipping git commit - no deployment file to update"
+          fi
 
   terraform-deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
+        with:
+          # Fetch the latest changes including the updated deployment file
+          ref: main
+          
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.8.4
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
-
+          
+      - name: Configure AWS credentials for Terraform
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
       - name: Terraform Init (with TFC backend)
         working-directory: Deployment
         run: terraform init
-
+        
+      - name: Terraform Validate
+        working-directory: Deployment
+        run: terraform validate
+        
       - name: Terraform Plan
         working-directory: Deployment
         run: terraform plan
-
+        
       - name: Terraform Apply
         working-directory: Deployment
         run: terraform apply -auto-approve
+        
+      - name: Get Terraform Outputs
+        working-directory: Deployment
+        run: |
+          echo "Infrastructure deployed successfully!"
+          terraform output || echo "No outputs defined"
+
+  notify:
+    needs: [build-and-push, terraform-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify deployment status
+        run: |
+          if [ "${{ needs.terraform-deploy.result }}" == "success" ]; then
+            echo "✅ Deployment completed successfully!"
+            echo "Docker image: ${{ needs.build-and-push.outputs.image_uri }}"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi
